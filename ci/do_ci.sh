@@ -61,6 +61,9 @@ fi
 if [[ "x$NO_EXCEPTION" != "x" ]]; then
   PROJECT_ADDON_OPTIONS=(${PROJECT_ADDON_OPTIONS[@]} "-DCMAKE_CXX_FLAGS=-fno-exceptions")
 fi
+if [[ "x$NO_RTTI" != "x" ]]; then
+  PROJECT_ADDON_OPTIONS=(${PROJECT_ADDON_OPTIONS[@]} "-DCMAKE_CXX_FLAGS=-fno-rtti")
+fi
 if [[ "x$THREAD_UNSAFE" != "x" ]]; then
   PROJECT_ADDON_OPTIONS=(${PROJECT_ADDON_OPTIONS[@]} "-DLIBCOPP_DISABLE_ATOMIC_LOCK=ON" "-DLIBCOPP_LOCK_DISABLE_THIS_MT=ON")
 fi
@@ -93,7 +96,7 @@ elif [[ "$1" == "gcc.test" ]] || [[ "$1" == "gcc.legacy.test" ]] || [[ "$1" == "
   cd build_jobs_ci
   cmake --build . -j2 --config $CONFIGURATION || cmake --build . --config $CONFIGURATION
   cmake --install .
-  ls -lh $PWD/build_jobs_ci/prebuilt/include/libcopp/utils/config/libcopp_build_features.h
+  ls -lh prebuilt/include/libcopp/utils/config/libcopp_build_features.h
 elif [[ "$1" == "msys2.mingw.test" ]]; then
   pacman -S --needed --noconfirm mingw-w64-x86_64-cmake git m4 curl wget tar autoconf automake \
     mingw-w64-x86_64-git-lfs mingw-w64-x86_64-toolchain mingw-w64-x86_64-libtool \
