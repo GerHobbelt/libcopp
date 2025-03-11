@@ -15,12 +15,20 @@ endif()
 if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.20.0")
   cmake_policy(SET CMP0117 NEW)
 endif()
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.22.0")
+  cmake_policy(SET CMP0128 NEW)
+endif()
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.27.0")
+  cmake_policy(SET CMP0144 NEW)
+endif()
+
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 enable_testing()
 
 project(
   libcopp
-  VERSION "2.2.0"
+  VERSION "2.3.0"
   DESCRIPTION "Cross-platform coroutine library in C++ ."
   HOMEPAGE_URL "https://libcopp.atframe.work"
   LANGUAGES C CXX ASM)
@@ -96,10 +104,6 @@ unset(PROJECT_LIBCOPP_SYSLIB_LINK_NAMES)
 # 导入所有 macro 定义
 include("${CMAKE_CURRENT_LIST_DIR}/include/include.macro.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/src/libcopp.macro.cmake")
-
-if(NOT EXISTS "${PROJECT_LIBCOPP_ROOT_INC_DIR}/libcopp/utils/config")
-  file(MAKE_DIRECTORY "${PROJECT_LIBCOPP_ROOT_INC_DIR}/libcopp/utils/config")
-endif()
 
 if(LIBCOTASK_ENABLE)
   set(LIBCOTASK_MACRO_ENABLED 1)

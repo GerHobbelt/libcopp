@@ -126,7 +126,7 @@ class LIBCOPP_COTASK_API_HEAD_ONLY task : public impl::task_impl {
     ret->coroutine_obj_->set_flags(impl::task_impl::ext_coroutine_flag_t::EN_ECFT_COTASK);
 
     // placement new action
-    a_t *action = new (action_addr) a_t(COPP_MACRO_STD_FORWARD(Ty, callable));
+    a_t *action = new (action_addr) a_t(std::forward<Ty>(callable));
     if (nullptr == action) {
       return ret;
     }
@@ -246,7 +246,7 @@ class LIBCOPP_COTASK_API_HEAD_ONLY task : public impl::task_impl {
       return next_task;
     }
 
-#if !defined(LIBCOPP_DISABLE_ATOMIC_LOCK) || !(LIBCOPP_DISABLE_ATOMIC_LOCK)
+#if LIBCOPP_MACRO_ENABLE_MULTI_THREAD
     LIBCOPP_COPP_NAMESPACE_ID::util::lock::lock_holder<LIBCOPP_COPP_NAMESPACE_ID::util::lock::spin_lock> lock_guard(
         inner_action_lock_);
 #endif
@@ -468,15 +468,15 @@ class LIBCOPP_COTASK_API_HEAD_ONLY task : public impl::task_impl {
     EN_TASK_STATUS from_status = expected_status;
 
     do {
-      COPP_UNLIKELY_IF (from_status >= EN_TS_DONE) {
+      if LIBCOPP_UTIL_UNLIKELY_CONDITION (from_status >= EN_TS_DONE) {
         return LIBCOPP_COPP_NAMESPACE_ID::COPP_EC_ALREADY_FINISHED;
       }
 
-      COPP_UNLIKELY_IF (from_status == EN_TS_RUNNING) {
+      if LIBCOPP_UTIL_UNLIKELY_CONDITION (from_status == EN_TS_RUNNING) {
         return LIBCOPP_COPP_NAMESPACE_ID::COPP_EC_IS_RUNNING;
       }
 
-      COPP_LIKELY_IF (_cas_status(from_status, EN_TS_RUNNING)) {  // Atomic.CAS here
+      if LIBCOPP_UTIL_LIKELY_CONDITION (_cas_status(from_status, EN_TS_RUNNING)) {  // Atomic.CAS here
         break;
       }
     } while (true);
@@ -497,7 +497,7 @@ class LIBCOPP_COTASK_API_HEAD_ONLY task : public impl::task_impl {
     from_status = EN_TS_RUNNING;
     if (is_completed()) {  // Atomic.CAS here
       while (from_status < EN_TS_DONE) {
-        COPP_LIKELY_IF (_cas_status(from_status, EN_TS_DONE)) {  // Atomic.CAS here
+        if LIBCOPP_UTIL_LIKELY_CONDITION (_cas_status(from_status, EN_TS_DONE)) {  // Atomic.CAS here
           break;
         }
       }
@@ -521,7 +521,7 @@ class LIBCOPP_COTASK_API_HEAD_ONLY task : public impl::task_impl {
         break;
       }
 
-      COPP_LIKELY_IF (_cas_status(from_status, EN_TS_WAITING)) {  // Atomic.CAS here
+      if LIBCOPP_UTIL_LIKELY_CONDITION (_cas_status(from_status, EN_TS_WAITING)) {  // Atomic.CAS here
         break;
         // waiting
       }
@@ -573,7 +573,7 @@ class LIBCOPP_COTASK_API_HEAD_ONLY task : public impl::task_impl {
         return LIBCOPP_COPP_NAMESPACE_ID::COPP_EC_IS_RUNNING;
       }
 
-      COPP_LIKELY_IF (_cas_status(from_status, EN_TS_CANCELED)) {
+      if LIBCOPP_UTIL_LIKELY_CONDITION (_cas_status(from_status, EN_TS_CANCELED)) {
         break;
       }
     } while (true);
@@ -602,7 +602,7 @@ class LIBCOPP_COTASK_API_HEAD_ONLY task : public impl::task_impl {
     EN_TASK_STATUS from_status = get_status();
 
     do {
-      COPP_LIKELY_IF (_cas_status(from_status, status)) {
+      if LIBCOPP_UTIL_LIKELY_CONDITION (_cas_status(from_status, status)) {
         break;
       }
     } while (true);
@@ -668,7 +668,7 @@ class LIBCOPP_COTASK_API_HEAD_ONLY task : public impl::task_impl {
   inline size_t use_count() const { return ref_count_.load(); }
 
 #if defined(LIBCOPP_MACRO_ENABLE_STD_EXCEPTION_PTR) && LIBCOPP_MACRO_ENABLE_STD_EXCEPTION_PTR
-  UTIL_FORCEINLINE static void maybe_rethrow(std::list<std::exception_ptr> &eptrs) {
+  LIBCOPP_UTIL_FORCEINLINE static void maybe_rethrow(std::list<std::exception_ptr> &eptrs) {
     for (std::list<std::exception_ptr>::iterator iter = eptrs.begin(); iter != eptrs.end(); ++iter) {
       coroutine_type::maybe_rethrow(*iter);
     }
@@ -689,7 +689,7 @@ class LIBCOPP_COTASK_API_HEAD_ONLY task : public impl::task_impl {
 #endif
     // first, lock and swap container
     {
-#if !defined(LIBCOPP_DISABLE_ATOMIC_LOCK) || !(LIBCOPP_DISABLE_ATOMIC_LOCK)
+#if LIBCOPP_MACRO_ENABLE_MULTI_THREAD
       LIBCOPP_COPP_NAMESPACE_ID::util::lock::lock_holder<LIBCOPP_COPP_NAMESPACE_ID::util::lock::spin_lock> lock_guard(
           inner_action_lock_);
 #endif
@@ -810,7 +810,7 @@ class LIBCOPP_COTASK_API_HEAD_ONLY task : public impl::task_impl {
     template <class>
     friend class LIBCOPP_COTASK_API_HEAD_ONLY task_manager;
     static bool setup_task_manager(self_type &task_inst, void *manager_ptr, void (*fn)(void *, self_type &)) {
-#  if !defined(LIBCOPP_DISABLE_ATOMIC_LOCK) || !(LIBCOPP_DISABLE_ATOMIC_LOCK)
+#  if LIBCOPP_MACRO_ENABLE_MULTI_THREAD
       LIBCOPP_COPP_NAMESPACE_ID::util::lock::lock_holder<LIBCOPP_COPP_NAMESPACE_ID::util::lock::spin_lock> lock_guard(
           task_inst.inner_action_lock_);
 #  endif
@@ -824,7 +824,7 @@ class LIBCOPP_COTASK_API_HEAD_ONLY task : public impl::task_impl {
     }
 
     static bool cleanup_task_manager(self_type &task_inst, void *manager_ptr) {
-#  if !defined(LIBCOPP_DISABLE_ATOMIC_LOCK) || !(LIBCOPP_DISABLE_ATOMIC_LOCK)
+#  if LIBCOPP_MACRO_ENABLE_MULTI_THREAD
       LIBCOPP_COPP_NAMESPACE_ID::util::lock::lock_holder<LIBCOPP_COPP_NAMESPACE_ID::util::lock::spin_lock> lock_guard(
           task_inst.inner_action_lock_);
 #  endif
@@ -928,7 +928,7 @@ class LIBCOPP_COTASK_API_HEAD_ONLY task : public impl::task_impl {
   // ============== action information ==============
   void (*action_destroy_fn_)(void *);
 
-#if !defined(LIBCOPP_DISABLE_ATOMIC_LOCK) || !(LIBCOPP_DISABLE_ATOMIC_LOCK)
+#if LIBCOPP_MACRO_ENABLE_MULTI_THREAD
   LIBCOPP_COPP_NAMESPACE_ID::util::lock::atomic_int_type<size_t> ref_count_; /** ref_count **/
   LIBCOPP_COPP_NAMESPACE_ID::util::lock::spin_lock inner_action_lock_;
 #else
