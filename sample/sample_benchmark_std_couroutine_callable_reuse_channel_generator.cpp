@@ -29,26 +29,24 @@
 #  endif
 
 using benchmark_callable_future_type = copp::callable_future<int64_t>;
-using benchmark_generator_future_type = copp::generator_future<int64_t>;
+using benchmark_generator_future_type = copp::generator_channel_future<int64_t>;
 
 std::vector<std::unique_ptr<benchmark_callable_future_type>> g_benchmark_callable_list;
-std::vector<benchmark_generator_future_type> g_benchmark_generator_list;
+std::vector<benchmark_generator_future_type::context_pointer_type> g_benchmark_generator_list;
 
-int recursive_count = 100;
+int switch_count = 100;
 int max_task_number = 100000;
 
-benchmark_callable_future_type run_benchmark(size_t idx, int left_recursive_count,
-                                             benchmark_generator_future_type* first_hang) {
-  int64_t result = left_recursive_count;
-  if (nullptr != first_hang) {
-    auto gen_res = co_await *first_hang;
-    result += gen_res;
-  } else {
-    result += idx;
-  }
+benchmark_callable_future_type run_benchmark(size_t idx, int left_switch_count) {
+  int64_t result = 0;
 
-  if (left_recursive_count > 1) {
-    auto gen_res = co_await run_benchmark(idx, left_recursive_count - 1, nullptr);
+  auto generator = copp::make_channel<int64_t>();
+
+  while (left_switch_count-- >= 0) {
+    generator.second->reset_value();
+
+    g_benchmark_generator_list[idx] = generator.second;
+    auto gen_res = co_await generator.first;
     result += gen_res;
   }
 
@@ -57,24 +55,17 @@ benchmark_callable_future_type run_benchmark(size_t idx, int left_recursive_coun
 
 static void benchmark_round(int index) {
   g_benchmark_callable_list.reserve(static_cast<size_t>(max_task_number));
-  g_benchmark_generator_list.reserve(static_cast<size_t>(max_task_number));
+  g_benchmark_generator_list.resize(static_cast<size_t>(max_task_number), nullptr);
 
   printf("### Round: %d ###\n", index);
-
-  // create generators
-  for (int i = 0; i < max_task_number; ++i) {
-    g_benchmark_generator_list.emplace_back(
-        benchmark_generator_future_type([](benchmark_generator_future_type::context_pointer_type) {}));
-  }
 
   time_t begin_time = time(nullptr);
   CALC_CLOCK_T begin_clock = CALC_CLOCK_NOW();
 
   // create coroutines callable
   while (g_benchmark_callable_list.size() < static_cast<size_t>(max_task_number)) {
-    size_t idx = g_benchmark_callable_list.size();
     g_benchmark_callable_list.push_back(std::unique_ptr<benchmark_callable_future_type>(
-        new benchmark_callable_future_type(run_benchmark(idx, recursive_count, &g_benchmark_generator_list[idx]))));
+        new benchmark_callable_future_type(run_benchmark(g_benchmark_callable_list.size(), switch_count))));
   }
 
   time_t end_time = time(nullptr);
@@ -87,10 +78,22 @@ static void benchmark_round(int index) {
   begin_clock = end_clock;
 
   // yield & resume from runner
-  long long real_switch_times = static_cast<long long>(max_task_number) * recursive_count;
+  bool continue_flag = true;
+  long long real_switch_times = static_cast<long long>(0);
+  int32_t round = 0;
 
-  for (int i = 0; i < max_task_number; ++i) {
-    g_benchmark_generator_list[static_cast<size_t>(i)].get_context()->set_value(i);
+  while (continue_flag) {
+    ++round;
+    continue_flag = false;
+    for (auto& generator_context : g_benchmark_generator_list) {
+      benchmark_generator_future_type::context_pointer_type move_context;
+      move_context.swap(generator_context);
+      if (move_context) {
+        move_context->set_value(round);
+        ++real_switch_times;
+        continue_flag = true;
+      }
+    }
   }
 
   end_time = time(nullptr);
@@ -103,6 +106,7 @@ static void benchmark_round(int index) {
   begin_clock = end_clock;
 
   g_benchmark_callable_list.clear();
+  g_benchmark_generator_list.clear();
 
   end_time = time(nullptr);
   end_clock = CALC_CLOCK_NOW();
@@ -112,7 +116,7 @@ static void benchmark_round(int index) {
 }
 
 int main(int argc, char* argv[]) {
-  puts("###################### std callable - recursive ###################");
+  puts("###################### std callable - reuse channel generator - trivial ###################");
   printf("########## Cmd:");
   for (int i = 0; i < argc; ++i) {
     printf(" %s", argv[i]);
@@ -124,7 +128,7 @@ int main(int argc, char* argv[]) {
   }
 
   if (argc > 2) {
-    recursive_count = atoi(argv[2]);
+    switch_count = atoi(argv[2]);
   }
 
   for (int i = 1; i <= 5; ++i) {
