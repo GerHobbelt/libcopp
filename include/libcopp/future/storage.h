@@ -641,6 +641,24 @@ class LIBCOPP_COPP_API_HEAD_ONLY result_base<TOK, TERR, false> {
   }
 
  private:
+  template <class TSTORAGE, class... TARGS>
+  LIBCOPP_UTIL_FORCEINLINE static void make_object(typename TSTORAGE::storage_type &out, TARGS &&...args) noexcept(
+      noexcept(TSTORAGE::construct_storage(out, std::forward<TARGS>(args)...))) {
+    TSTORAGE::construct_storage(out, std::forward<TARGS>(args)...);
+  }
+
+  template <class TSTORAGE, class... TARGS>
+  LIBCOPP_UTIL_FORCEINLINE static void make_object(
+      LIBCOPP_COPP_NAMESPACE_ID::memory::default_strong_rc_ptr<typename TSTORAGE::storage_type> &out,
+      TARGS &&...args) noexcept(noexcept(TSTORAGE::construct_storage(out, LIBCOPP_COPP_NAMESPACE_ID::memory::
+                                                                              default_make_strong<
+                                                                                  typename TSTORAGE::storage_type>(
+                                                                                  std::forward<TARGS>(args)...)))) {
+    TSTORAGE::construct_storage(out,
+                                LIBCOPP_COPP_NAMESPACE_ID::memory::default_make_strong<typename TSTORAGE::storage_type>(
+                                    std::forward<TARGS>(args)...));
+  }
+
   success_value_type success_value_;
   error_value_type error_value_;
   mode_type mode_;
