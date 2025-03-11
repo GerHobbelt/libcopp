@@ -26,11 +26,13 @@ LIBCOPP_COPP_API int stackful_channel_resume_handle<coroutine_context>::resume(
       reinterpret_cast<coroutine_context_base *>(invoke_ctx), priv_data);
 }
 
+#if defined(LIBCOPP_MACRO_ENABLE_WIN_FIBER) && LIBCOPP_MACRO_ENABLE_WIN_FIBER
 LIBCOPP_COPP_API int stackful_channel_resume_handle<coroutine_context_fiber>::resume(
     void *invoke_ctx, stackful_channel_context_base *priv_data) {
   return stackful_channel_resume_invoker<coroutine_context_fiber>::resume(
       reinterpret_cast<coroutine_context_base *>(invoke_ctx), priv_data);
 }
+#endif
 
 LIBCOPP_COPP_API stackful_channel_context_base::stackful_channel_context_base() noexcept {}
 
@@ -153,8 +155,7 @@ LIBCOPP_COPP_API bool stackful_channel_context_base::has_multiple_callers() cons
   return false;
 #else
   size_t count = 0;
-  if (unique_caller_.handle && !unique_caller_.handle.done() &&
-      (nullptr == unique_caller_.promise || !unique_caller_.promise->check_flag(promise_flag::kDestroying))) {
+  if (unique_caller_.handle_data && unique_caller_.resume_handle) {
     ++count;
   }
 

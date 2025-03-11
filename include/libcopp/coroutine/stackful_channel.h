@@ -38,7 +38,9 @@ LIBCOPP_COPP_NAMESPACE_BEGIN
 
 class coroutine_context_base;
 class coroutine_context;
+#if defined(LIBCOPP_MACRO_ENABLE_WIN_FIBER) && LIBCOPP_MACRO_ENABLE_WIN_FIBER
 class coroutine_context_fiber;
+#endif
 
 class stackful_channel_context_base;
 
@@ -62,10 +64,12 @@ struct stackful_channel_resume_handle<coroutine_context> {
   LIBCOPP_COPP_API static int resume(void *invoke_ctx, stackful_channel_context_base *priv_data);
 };
 
+#if defined(LIBCOPP_MACRO_ENABLE_WIN_FIBER) && LIBCOPP_MACRO_ENABLE_WIN_FIBER
 template <>
 struct stackful_channel_resume_handle<coroutine_context_fiber> {
   LIBCOPP_COPP_API static int resume(void *invoke_ctx, stackful_channel_context_base *priv_data);
 };
+#endif
 
 template <class TCOROUTINE_OBJECT>
 struct stackful_channel_resume_invoker {
@@ -91,17 +95,36 @@ struct stackful_channel_resume_handle {
 };
 
 struct LIBCOPP_COPP_API_HEAD_ONLY stackful_channel_handle_delegate {
-  void *handle_data = nullptr;
-  int (*resume_handle)(void *, stackful_channel_context_base *priv_data) = nullptr;
+  void *handle_data;
+  int (*resume_handle)(void *, stackful_channel_context_base *priv_data);
 
-  LIBCOPP_UTIL_FORCEINLINE stackful_channel_handle_delegate() noexcept = default;
-  LIBCOPP_UTIL_FORCEINLINE stackful_channel_handle_delegate(const stackful_channel_handle_delegate &) noexcept =
-      default;
-  LIBCOPP_UTIL_FORCEINLINE stackful_channel_handle_delegate(stackful_channel_handle_delegate &&) noexcept = default;
+  LIBCOPP_UTIL_FORCEINLINE stackful_channel_handle_delegate() noexcept : handle_data(nullptr), resume_handle(nullptr) {}
+
+  LIBCOPP_UTIL_FORCEINLINE stackful_channel_handle_delegate(const stackful_channel_handle_delegate &other) noexcept
+      : handle_data(other.handle_data), resume_handle(other.resume_handle) {}
+
+  LIBCOPP_UTIL_FORCEINLINE stackful_channel_handle_delegate(stackful_channel_handle_delegate &&other) noexcept
+      : handle_data(other.handle_data), resume_handle(other.resume_handle) {
+    other.handle_data = nullptr;
+    other.resume_handle = nullptr;
+  }
+
   LIBCOPP_UTIL_FORCEINLINE stackful_channel_handle_delegate &operator=(
-      const stackful_channel_handle_delegate &) noexcept = default;
-  LIBCOPP_UTIL_FORCEINLINE stackful_channel_handle_delegate &operator=(stackful_channel_handle_delegate &&) noexcept =
-      default;
+      const stackful_channel_handle_delegate &other) noexcept {
+    handle_data = other.handle_data;
+    resume_handle = other.resume_handle;
+    return *this;
+  }
+
+  LIBCOPP_UTIL_FORCEINLINE stackful_channel_handle_delegate &operator=(
+      stackful_channel_handle_delegate &&other) noexcept {
+    handle_data = other.handle_data;
+    resume_handle = other.resume_handle;
+
+    other.handle_data = nullptr;
+    other.resume_handle = nullptr;
+    return *this;
+  }
 
   template <class TCOROUTINE_OBJECT>
   explicit inline stackful_channel_handle_delegate(TCOROUTINE_OBJECT *ctx) noexcept
@@ -217,18 +240,24 @@ class LIBCOPP_COPP_API_HEAD_ONLY stackful_channel_context : public stackful_chan
   using handle_delegate_hash = stackful_channel_context_base::handle_delegate_hash;
 
  public:
-  LIBCOPP_UTIL_FORCEINLINE stackful_channel_context() = default;
-  LIBCOPP_UTIL_FORCEINLINE ~stackful_channel_context() = default;
+  LIBCOPP_UTIL_FORCEINLINE stackful_channel_context() noexcept(
+      std::is_nothrow_constructible<future::future<value_type>>::value) {}
+
+  LIBCOPP_UTIL_FORCEINLINE ~stackful_channel_context() noexcept(
+      std::is_nothrow_destructible<future::future<value_type>>::value) {}
 
  public:
   LIBCOPP_UTIL_FORCEINLINE bool is_ready() const noexcept { return data_.is_ready(); }
 
   LIBCOPP_UTIL_FORCEINLINE bool is_pending() const noexcept { return data_.is_pending(); }
 
-  LIBCOPP_UTIL_FORCEINLINE void reset_value() noexcept(noexcept(data_.reset_data())) { data_.reset_data(); }
+  LIBCOPP_UTIL_FORCEINLINE void reset_value() noexcept(noexcept(std::declval<future::future<TVALUE>>().reset_data())) {
+    data_.reset_data();
+  }
 
   template <class U>
-  LIBCOPP_UTIL_FORCEINLINE void set_value(U &&in) noexcept(noexcept(data_.reset_data(std::forward<U>(in)))) {
+  LIBCOPP_UTIL_FORCEINLINE void set_value(U &&in) noexcept(
+      noexcept(std::declval<future::future<TVALUE>>().reset_data(std::forward<U>(in)))) {
     data_.reset_data(std::forward<U>(in));
 
     // Wakeup all waiting coroutines
@@ -241,8 +270,11 @@ class LIBCOPP_COPP_API_HEAD_ONLY stackful_channel_context : public stackful_chan
 
   template <
       class TCONTEXT, class TERROR_TRANSFORM,
-      class = nostd::enable_if_t<!std::is_base_of<coroutine_context, nostd::remove_cvref_t<TCONTEXT>>::value &&
-                                 !std::is_base_of<coroutine_context_fiber, nostd::remove_cvref_t<TCONTEXT>>::value>>
+      class = nostd::enable_if_t<!std::is_base_of<coroutine_context, nostd::remove_cvref_t<TCONTEXT>>::value
+#if defined(LIBCOPP_MACRO_ENABLE_WIN_FIBER) && LIBCOPP_MACRO_ENABLE_WIN_FIBER
+                                 && !std::is_base_of<coroutine_context_fiber, nostd::remove_cvref_t<TCONTEXT>>::value
+#endif
+                                 >>
   LIBCOPP_UTIL_FORCEINLINE value_type inject_await(TCONTEXT *ctx, TERROR_TRANSFORM &&error_transform) noexcept(
       std::is_nothrow_copy_constructible<value_type>::value && noexcept(error_transform(COPP_EC_ARGS_ERROR))) {
     return internal_inject_await<TCONTEXT>(ctx, std::forward<TERROR_TRANSFORM>(error_transform));
@@ -254,6 +286,7 @@ class LIBCOPP_COPP_API_HEAD_ONLY stackful_channel_context : public stackful_chan
     return internal_inject_await<coroutine_context>(ctx, std::forward<TERROR_TRANSFORM>(error_transform));
   }
 
+#if defined(LIBCOPP_MACRO_ENABLE_WIN_FIBER) && LIBCOPP_MACRO_ENABLE_WIN_FIBER
   template <class TERROR_TRANSFORM>
   LIBCOPP_UTIL_FORCEINLINE value_type
   inject_await(coroutine_context_fiber *ctx,
@@ -261,6 +294,7 @@ class LIBCOPP_COPP_API_HEAD_ONLY stackful_channel_context : public stackful_chan
                                                             noexcept(error_transform(COPP_EC_ARGS_ERROR))) {
     return internal_inject_await<coroutine_context_fiber>(ctx, std::forward<TERROR_TRANSFORM>(error_transform));
   }
+#endif
 
  private:
   template <class TCONTEXT, class TERROR_TRANSFORM>
@@ -309,7 +343,7 @@ class LIBCOPP_COPP_API_HEAD_ONLY stackful_channel_receiver {
 
  public:
   inline stackful_channel_receiver() noexcept
-      : context_{LIBCOPP_COPP_NAMESPACE_ID::memory::make_strong_rc<context_type>()} {}
+      : context_(LIBCOPP_COPP_NAMESPACE_ID::memory::default_make_strong<context_type>()) {}
 
   LIBCOPP_UTIL_FORCEINLINE bool is_ready() const noexcept {
     if LIBCOPP_UTIL_UNLIKELY_CONDITION (!context_) {
@@ -325,7 +359,7 @@ class LIBCOPP_COPP_API_HEAD_ONLY stackful_channel_receiver {
     return context_->is_pending();
   }
 
-  LIBCOPP_UTIL_FORCEINLINE void reset_value() noexcept(noexcept(context_->reset_value())) {
+  LIBCOPP_UTIL_FORCEINLINE void reset_value() noexcept(noexcept(std::declval<context_type>().reset_value())) {
     if LIBCOPP_UTIL_UNLIKELY_CONDITION (!context_) {
       return;
     }
@@ -394,7 +428,7 @@ class LIBCOPP_COPP_API_HEAD_ONLY stackful_channel_sender {
     return context_->is_pending();
   }
 
-  LIBCOPP_UTIL_FORCEINLINE void reset_value() noexcept(noexcept(context_->reset_value())) {
+  LIBCOPP_UTIL_FORCEINLINE void reset_value() noexcept(noexcept(std::declval<context_type>().reset_value())) {
     if LIBCOPP_UTIL_UNLIKELY_CONDITION (!context_) {
       return;
     }
@@ -403,7 +437,8 @@ class LIBCOPP_COPP_API_HEAD_ONLY stackful_channel_sender {
   }
 
   template <class U>
-  LIBCOPP_UTIL_FORCEINLINE void set_value(U &&in) noexcept(noexcept(context_->set_value(std::forward<U>(in)))) {
+  LIBCOPP_UTIL_FORCEINLINE void set_value(U &&in) noexcept(
+      noexcept(std::declval<context_type>().set_value(std::forward<U>(in)))) {
     if LIBCOPP_UTIL_UNLIKELY_CONDITION (!context_) {
       return;
     }

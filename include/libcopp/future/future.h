@@ -28,7 +28,7 @@ class LIBCOPP_COPP_API_HEAD_ONLY future {
 
  public:
   future() noexcept(std::is_nothrow_constructible<poller_type>::value) {}
-  ~future() {}
+  ~future() noexcept(std::is_nothrow_destructible<poller_type>::value) {}
 
   LIBCOPP_UTIL_FORCEINLINE bool is_ready() const noexcept { return poll_data_.is_ready(); }
 
@@ -54,7 +54,9 @@ class LIBCOPP_COPP_API_HEAD_ONLY future {
   LIBCOPP_UTIL_FORCEINLINE ptr_type &raw_ptr() noexcept { return poll_data_.raw_ptr(); }
   LIBCOPP_UTIL_FORCEINLINE const poller_type &poll_data() const noexcept { return poll_data_; }
   LIBCOPP_UTIL_FORCEINLINE poller_type &poll_data() noexcept { return poll_data_; }
-  LIBCOPP_UTIL_FORCEINLINE void reset_data() noexcept(noexcept(poll_data_.reset())) { poll_data_.reset(); }
+  LIBCOPP_UTIL_FORCEINLINE void reset_data() noexcept(noexcept(::std::declval<poller_type>().reset())) {
+    poll_data_.reset();
+  }
 
   template <class U>
   LIBCOPP_UTIL_FORCEINLINE void reset_data(U &&in) noexcept(std::is_nothrow_assignable<poller_type, U>::value) {
