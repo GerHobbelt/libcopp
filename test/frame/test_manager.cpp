@@ -443,7 +443,7 @@ int run_event_on_start() { return test_manager::me().run_event_on_start(); }
 
 int run_event_on_exit() { return test_manager::me().run_event_on_exit(); }
 
-int run_tests(int argc, char *argv[]) {
+int run_tests(int argc, const char **argv) {
   std::vector<std::string> run_cases;
   const char *version = "1.0.0";
   bool is_help = false;

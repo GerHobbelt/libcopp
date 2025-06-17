@@ -30,7 +30,7 @@ boost::unit_test::test_suite *init_unit_test_suite(int argc, char *argv[]) {
 
 #if !defined(UTILS_TEST_MACRO_TEST_ENABLE_BOOST_TEST) || defined(BOOST_TEST_DYN_LINK) || defined(BOOST_TEST_NO_MAIN)
 
-int main(int argc, char *argv[]) {
+int main(int argc, const char **argv) {
 #  ifdef UTILS_TEST_MACRO_TEST_ENABLE_GTEST
   ::testing::InitGoogleTest(&argc, argv);
   run_event_on_start();
