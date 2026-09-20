@@ -543,3 +543,83 @@ CASE_TEST(coroutine_channel, multiple_callers_resume_fifo) {
     }
   }
 }
+
+CASE_TEST(coroutine_channel, multiple_callers_resume_fifo_after_first_removed) {
+  int caller_indexes[3] = {0, 1, 2};
+  copp::stackful_channel_handle_delegate callers[3];
+  test_context_channel_fifo_context context;
+  for (int index = 0; index < 3; ++index) {
+    callers[index].handle_data = &caller_indexes[index];
+    callers[index].resume_handle = &test_context_channel_fifo_resume;
+  }
+
+  context.add_caller(callers[0]);
+  context.add_caller(callers[1]);
+  CASE_EXPECT_TRUE(context.remove_caller(callers[0]));
+  CASE_EXPECT_FALSE(context.has_multiple_callers());
+
+  // New and re-registered callers must stay behind the remaining waiter.
+  context.add_caller(callers[2]);
+  context.add_caller(callers[0]);
+  context.add_caller(callers[1]);
+  CASE_EXPECT_TRUE(context.has_multiple_callers());
+
+  g_test_coroutine_channel_fifo_order.clear();
+  CASE_EXPECT_EQ(3, static_cast<int>(context.resume_callers()));
+  CASE_EXPECT_EQ(3, static_cast<int>(g_test_coroutine_channel_fifo_order.size()));
+  if (g_test_coroutine_channel_fifo_order.size() == 3) {
+    CASE_EXPECT_EQ(1, g_test_coroutine_channel_fifo_order[0]);
+    CASE_EXPECT_EQ(2, g_test_coroutine_channel_fifo_order[1]);
+    CASE_EXPECT_EQ(0, g_test_coroutine_channel_fifo_order[2]);
+  }
+  CASE_EXPECT_FALSE(context.has_multiple_callers());
+  CASE_EXPECT_EQ(0, static_cast<int>(context.resume_callers()));
+}
+
+CASE_TEST(coroutine_channel, multiple_callers_add_remove_edge_cases) {
+  int caller_indexes[3] = {0, 1, 2};
+  copp::stackful_channel_handle_delegate first_caller;
+  copp::stackful_channel_handle_delegate second_caller;
+  copp::stackful_channel_handle_delegate unregistered_caller;
+  first_caller.handle_data = &caller_indexes[0];
+  first_caller.resume_handle = &test_context_channel_fifo_resume;
+  second_caller.handle_data = &caller_indexes[1];
+  second_caller.resume_handle = &test_context_channel_fifo_resume;
+  unregistered_caller.handle_data = &caller_indexes[2];
+  unregistered_caller.resume_handle = &test_context_channel_fifo_resume;
+
+  test_context_channel_fifo_context context;
+
+  // Re-adding the same handle while it's the only caller keeps a single caller.
+  context.add_caller(first_caller);
+  context.add_caller(first_caller);
+  CASE_EXPECT_FALSE(context.has_multiple_callers());
+
+  // Removing a handle that was never registered returns false while single caller.
+  CASE_EXPECT_FALSE(context.remove_caller(second_caller));
+
+  // Convert to multiple callers, then a repeated registration is still ignored.
+  context.add_caller(second_caller);
+  context.add_caller(first_caller);
+  CASE_EXPECT_TRUE(context.has_multiple_callers());
+
+  // Removing a handle not present in multi-caller mode returns false.
+  CASE_EXPECT_FALSE(context.remove_caller(unregistered_caller));
+
+  // Removing the registered handles returns true and empties the caller set.
+  CASE_EXPECT_TRUE(context.remove_caller(first_caller));
+  // Re-adding the remaining caller must not duplicate it into the vacant single-caller slot.
+  context.add_caller(second_caller);
+  CASE_EXPECT_FALSE(context.has_multiple_callers());
+  CASE_EXPECT_TRUE(context.remove_caller(second_caller));
+  CASE_EXPECT_FALSE(context.remove_caller(second_caller));
+
+  g_test_coroutine_channel_fifo_order.clear();
+  CASE_EXPECT_EQ(0, static_cast<int>(context.resume_callers()));
+  CASE_EXPECT_TRUE(g_test_coroutine_channel_fifo_order.empty());
+
+  context.add_caller(first_caller);
+  CASE_EXPECT_FALSE(context.has_multiple_callers());
+  CASE_EXPECT_EQ(1, static_cast<int>(context.resume_callers()));
+  CASE_EXPECT_EQ(1, static_cast<int>(g_test_coroutine_channel_fifo_order.size()));
+}
